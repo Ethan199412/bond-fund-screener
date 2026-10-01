@@ -1,0 +1,9 @@
+# 缓存与导出结果
+data/
+
+# 依赖与构建产物
+node_modules/
+public/dist/
+
+# 日志
+*.log
