@@ -1,34 +1,12 @@
 import { COLUMNS } from '../config.js';
 import ScorePill from './ScorePill.jsx';
+import InfoTip from './InfoTip.jsx';
 
 function pct(x) {
   return x == null ? '—' : (x * 100).toFixed(2) + '%';
 }
 function num(x, d = 2) {
   return x == null ? '—' : Number(x).toFixed(d);
-}
-
-function sortValue(r, key) {
-  switch (key) {
-    case 'name':
-      return r.name;
-    case 'category':
-      return r.category;
-    case 'composite':
-      return r.composite ?? -Infinity;
-    case 'rank':
-      return r.rank;
-    case 'establishDate':
-      return r.raw?.establishDate || '';
-    case 'size':
-      return r.raw?.size ?? -Infinity;
-    case 'managerYears':
-      return r.raw?.managerYears ?? -Infinity;
-    case 'fee':
-      return r.raw?.totalFee ?? Infinity;
-    default:
-      return r.scores?.[key] ?? -Infinity;
-  }
 }
 
 function Cell({ r, col }) {
@@ -41,6 +19,9 @@ function Cell({ r, col }) {
         <>
           <div className="fund-name">{r.name}</div>
           <div className="fund-code">{r.code}</div>
+          {r.raw?.peers?.length > 0 && (
+            <div className="peers">同源份额：{r.raw.peers.map((p) => p.name).join('、')}</div>
+          )}
         </>
       );
     case 'category':
@@ -105,45 +86,35 @@ function Cell({ r, col }) {
   }
 }
 
-export default function FundTable({ results, filter, sort, setSort }) {
-  const rows = results
-    .filter((r) => filter === 'all' || r.categoryKey === filter)
-    .sort((a, b) => {
-      const av = sortValue(a, sort.key);
-      const bv = sortValue(b, sort.key);
-      if (av === bv) return 0;
-      return av > bv ? sort.dir : -sort.dir;
-    });
-
-  const onSort = (key) => {
-    if (sort.key === key) setSort({ key, dir: -sort.dir });
-    else setSort({ key, dir: key === 'name' || key === 'category' ? 1 : -1 });
-  };
-
+export default function FundTable({ items, sort, onSort }) {
   return (
     <div className="table-scroll">
-      <table>
+      <table style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr>
             {COLUMNS.map((col) => (
-              <th key={col.key} className={col.align} onClick={() => onSort(col.key)}>
+              <th key={col.key} className={col.align} style={{ width: col.width }} onClick={() => onSort(col.key)}>
                 {col.label}
                 {sort.key === col.key ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
+                {col.desc && <InfoTip text={col.desc} />}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {items.map((r) => (
             <tr key={r.code}>
               {COLUMNS.map((col) => (
-                <td key={col.key} className={col.align === 'left' ? 'left' : ''}>
+                <td
+                  key={col.key}
+                  className={`${col.align === 'left' ? 'left' : ''}${col.key === 'name' ? ' cell-name' : ''}`}
+                >
                   <Cell r={r} col={col} />
                 </td>
               ))}
             </tr>
           ))}
-          {rows.length === 0 && (
+          {items.length === 0 && (
             <tr>
               <td colSpan={COLUMNS.length} className="left muted" style={{ padding: '24px' }}>
                 暂无结果

@@ -91,6 +91,8 @@ input:focus { border-color: var(--brand); }
   background: #fff;
 }
 .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.filter-label { font-size: 12px; color: var(--muted); align-self: center; margin-right: 2px; }
+.chip-clear { color: var(--brand); border-style: dashed; }
 .count { font-size: 12px; color: var(--muted); }
 
 .table-scroll { overflow-x: auto; }
@@ -114,8 +116,10 @@ tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align
 tbody td.left { text-align: left; }
 tbody tr:hover { background: #f8fafc; }
 
-.fund-name { font-weight: 600; }
-.fund-code { color: var(--muted); font-size: 12px; }
+.fund-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fund-code { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peers { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-name { overflow: hidden; }
 
 .badge {
   display: inline-block;
@@ -149,3 +153,38 @@ tbody tr:hover { background: #f8fafc; }
 .raw-sm { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .muted { color: var(--muted); }
 .foot { padding: 24px 20px 40px; font-size: 12px; color: var(--muted); }
+
+.pagination { display: flex; align-items: center; gap: 10px; margin-top: 12px; justify-content: flex-end; }
+.page-info { font-size: 13px; color: var(--muted); }
+
+.infotip { position: relative; display: inline-block; margin-left: 3px; vertical-align: middle; }
+.infotip-btn {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.infotip-btn:hover { border-color: var(--brand); color: var(--brand); }
+.infotip-pop {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  z-index: 40;
+  width: 250px;
+  background: #1f2937;
+  color: #f3f4f6;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: left;
+  font-weight: normal;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}

@@ -3,32 +3,89 @@ import Controls from './components/Controls.jsx';
 import ProgressBar from './components/ProgressBar.jsx';
 import Filters from './components/Filters.jsx';
 import FundTable from './components/FundTable.jsx';
-import { startScreen, getJob } from './api.js';
+import Pagination from './components/Pagination.jsx';
+import { startScreen, getJob, getLatest, fetchLatestResults } from './api.js';
+
+const PAGE_SIZE = 50;
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function App() {
   const [funds, setFunds] = useState('');
   const [maxFunds, setMaxFunds] = useState('200');
   const [status, setStatus] = useState('idle'); // idle | running | done | error
   const [progress, setProgress] = useState({ done: 0, total: 0, current: null });
-  const [results, setResults] = useState([]);
-  const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [savedAt, setSavedAt] = useState(null);
+
+  // 分页 / 排序 / 筛选状态（结果落盘在后端，前端只持当前页）
+  const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [evaluated, setEvaluated] = useState(0);
+  const [succeeded, setSucceeded] = useState(0);
+  const [filtered, setFiltered] = useState(0);
   const [sort, setSort] = useState({ key: 'composite', dir: -1 });
-  const [jobId, setJobId] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [companies, setCompanies] = useState([]);
+
   const timerRef = useRef(null);
 
   useEffect(() => () => clearInterval(timerRef.current), []);
+
+  const loadPage = async (p, s, f, comps = []) => {
+    const params = new URLSearchParams({
+      page: p,
+      pageSize: PAGE_SIZE,
+      sort: s.key,
+      dir: s.dir === -1 ? 'desc' : 'asc',
+      filter: f,
+    });
+    if (comps.length) params.set('company', comps.join(','));
+    const data = await fetchLatestResults(params);
+    setItems(data.items || []);
+    setPage(data.page || 1);
+    setPages(data.pages || 1);
+    setFiltered(data.filtered || 0);
+  };
+
+  // 打开页面即加载上次结果，秒出；无需重新跑筛选
+  useEffect(() => {
+    (async () => {
+      try {
+        const latest = await getLatest();
+        if (latest.exists) {
+          setEvaluated(latest.total);
+          setSucceeded(latest.count);
+          setSavedAt(latest.savedAt);
+          setStatus('done');
+          try {
+            await loadPage(1, sort, filter);
+          } catch (e) {
+            setError('加载结果失败：' + (e.message || e));
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const run = async () => {
     clearInterval(timerRef.current);
     setStatus('running');
     setError('');
-    setResults([]);
+    setItems([]);
     setProgress({ done: 0, total: 0, current: null });
     try {
       const { jobId } = await startScreen({ funds: funds.trim(), maxFunds: maxFunds || '200' });
-      setJobId(jobId);
       timerRef.current = setInterval(async () => {
         try {
           const job = await getJob(jobId);
@@ -36,9 +93,15 @@ export default function App() {
             setProgress(job.progress || {});
           } else if (job.status === 'done') {
             clearInterval(timerRef.current);
-            setResults(job.results || []);
-            setTotal(job.total);
+            setEvaluated(job.total);
+            setSucceeded(job.count);
+            setSavedAt(new Date().toISOString());
             setStatus('done');
+            try {
+              await loadPage(1, sort, filter, companies);
+            } catch (e) {
+              setError('加载结果失败：' + (e.message || e));
+            }
           } else if (job.status === 'error') {
             clearInterval(timerRef.current);
             setError(job.error || '未知错误');
@@ -54,8 +117,34 @@ export default function App() {
     }
   };
 
-  const exportUrl = (ext) => (jobId ? `/api/job/${jobId}/${ext}` : '#');
-  const shownCount = results.filter((r) => filter === 'all' || r.categoryKey === filter).length;
+  const onSort = (key) => {
+    const next =
+      sort.key === key
+        ? { key, dir: -sort.dir }
+        : { key, dir: key === 'name' || key === 'category' ? 1 : -1 };
+    setSort(next);
+    if (status === 'done') loadPage(1, next, filter, companies);
+  };
+
+  const onFilter = (k) => {
+    setFilter(k);
+    if (status === 'done') loadPage(1, sort, k, companies);
+  };
+
+  const onPage = (p) => {
+    if (status === 'done') loadPage(p, sort, filter, companies);
+  };
+
+  const toggleCompany = (c) => {
+    const next = companies.includes(c) ? companies.filter((x) => x !== c) : [...companies, c];
+    setCompanies(next);
+    if (status === 'done') loadPage(1, sort, filter, next);
+  };
+
+  const clearCompanies = () => {
+    setCompanies([]);
+    if (status === 'done') loadPage(1, sort, filter, []);
+  };
 
   return (
     <>
@@ -75,8 +164,8 @@ export default function App() {
           onRun={run}
           running={status === 'running'}
           canExport={status === 'done'}
-          onExportCsv={() => window.open(exportUrl('csv'))}
-          onExportJson={() => window.open(exportUrl('json'))}
+          onExportCsv={() => window.open('/api/latest/csv')}
+          onExportJson={() => window.open('/api/latest/json')}
         />
 
         {status === 'running' && <ProgressBar progress={progress} />}
@@ -90,16 +179,24 @@ export default function App() {
         {status === 'done' && (
           <>
             <section className="summary">
-              共评估 <b>{total}</b> 只债券基金，成功 <b>{results.length}</b> 只，按综合得分降序排列。
+              共评估 <b>{evaluated}</b> 只，成功 <b>{succeeded}</b> 只，按综合得分降序排列。
+              {savedAt && (
+                <span style={{ marginLeft: 12 }}>数据截至 {fmtTime(savedAt)}</span>
+              )}
             </section>
             <section className="card">
               <div className="toolbar">
-                <Filters filter={filter} setFilter={setFilter} />
-                <div className="count">
-                  显示 {shownCount} / {results.length} 只
-                </div>
+                <Filters
+                  filter={filter}
+                  onFilter={onFilter}
+                  companies={companies}
+                  onToggleCompany={toggleCompany}
+                  onClearCompanies={clearCompanies}
+                />
+                <div className="count">当前筛选 {filtered} 只</div>
               </div>
-              <FundTable results={results} filter={filter} sort={sort} setSort={setSort} />
+              <FundTable items={items} sort={sort} onSort={onSort} />
+              <Pagination page={page} pages={pages} filtered={filtered} onPage={onPage} />
             </section>
           </>
         )}

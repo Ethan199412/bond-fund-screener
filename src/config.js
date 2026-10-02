@@ -135,8 +135,12 @@ export const LOOKBACK = {
   annualizedYears2: 5, // 年化参考口径（仅展示，不参与评分）
 };
 
-// 5) 候选池：默认从全量债券基金里按代码升序取前 N 只（0 = 不限量，会抓全部，耗时较长）
+// 5) 候选池：默认从全量债券基金里按代码升序取前 N 只（0 = 不限量，会抓全部）
 export const DEFAULT_MAX_FUNDS = 200;
+
+// 5.1) 类型白名单预筛：只精算这些类别的基金，其余（二级债/一级债/可转债/偏债混合/QDII 等）直接跳过，
+//      不进入候选池。想纳入更多类别，改这个数组，并同步 public/src/config.js 里的 CATEGORIES。
+export const INCLUDE_CATEGORIES = ['short', 'pure', 'long', 'index'];
 
 // 6) 抓取参数
 export const HTTP = {
@@ -156,7 +160,7 @@ export const DIRS = {
 };
 export const CACHE_TTL_DAYS = {
   list: 7, // 基金列表
-  pz: 1, // 净值/规模/经理/资产配置
+  pz: 15, // 净值/规模/经理/资产配置（回撤/年化对单日净值不敏感，放宽到 15 天）
   jjfl: 7, // 费率/成立日期
 };
 

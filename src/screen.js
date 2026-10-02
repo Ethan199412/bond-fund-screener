@@ -8,7 +8,7 @@ import {
 } from './eastmoney.js';
 import { computeAnnualized, computeMaxDrawdown, computeRecoveryDays, parseManagerYears } from './metrics.js';
 import { scoreFund } from './score.js';
-import { LOOKBACK, DEFAULT_MAX_FUNDS } from './config.js';
+import { LOOKBACK, DEFAULT_MAX_FUNDS, INCLUDE_CATEGORIES } from './config.js';
 import { mapPool, sleep } from './http.js';
 
 const DAY = 86400000;
@@ -23,6 +23,10 @@ export async function runScreen({ funds = null, maxFunds = DEFAULT_MAX_FUNDS, on
     candidates = list.filter((f) => set.has(f.code));
   } else {
     candidates = list.filter(isBondFund);
+    // 类型白名单预筛：只保留目标类别
+    candidates = candidates.filter((f) => INCLUDE_CATEGORIES.includes(categorize(f.type, f.name).key));
+    // 同源份额（A/C/E…）去重，每组只精算代表份额
+    candidates = dedupeShares(candidates);
     if (maxFunds > 0) candidates = candidates.slice(0, maxFunds);
   }
   candidates.sort((a, b) => a.code.localeCompare(b.code));
@@ -42,6 +46,37 @@ export async function runScreen({ funds = null, maxFunds = DEFAULT_MAX_FUNDS, on
   results.sort((a, b) => (b.composite ?? -1) - (a.composite ?? -1));
   results.forEach((r, i) => (r.rank = i + 1));
   return { total: candidates.length, results };
+}
+
+// 去掉末尾份额字母（A/C/E/B/D/Y…），得到同源基金的基名
+function baseName(name) {
+  return String(name || '').replace(/[ABCDEY]$/i, '').trim();
+}
+
+// 同源份额（如 A/C 份额对）去重：每组只保留代表份额，其余记入 peers
+function dedupeShares(funds) {
+  const groups = new Map();
+  for (const f of funds) {
+    const base = baseName(f.name);
+    if (!groups.has(base)) groups.set(base, []);
+    groups.get(base).push(f);
+  }
+  const suffixRank = (f) => {
+    const name = String(f.name || '');
+    const s = name.slice(-1).toUpperCase();
+    if (s === 'A') return 0;
+    if (!/[A-Z]$/.test(name)) return 1;
+    if (s === 'C') return 2;
+    return 3;
+  };
+  const reps = [];
+  for (const arr of groups.values()) {
+    arr.sort((a, b) => suffixRank(a) - suffixRank(b) || a.code.localeCompare(b.code));
+    const rep = arr[0];
+    rep.peers = arr.slice(1).map((x) => ({ code: x.code, name: x.name }));
+    reps.push(rep);
+  }
+  return reps;
 }
 
 async function scoreOne(f) {
@@ -121,6 +156,7 @@ async function scoreOne(f) {
       totalFee: fee ? fee.total : null,
       establishDate: fee ? fee.establishDate : null,
       navPoints: accNav.length,
+      peers: f.peers || [],
     },
   };
 }
@@ -152,6 +188,7 @@ export function toCSV(results) {
     '任职年限(年)',
     '综合费率%(年)',
     '成立日期',
+    '同源份额',
   ];
   const rows = results.map((r) => {
     const pct = (x) => (x == null ? '' : (x * 100).toFixed(2));
@@ -180,6 +217,7 @@ export function toCSV(results) {
       r.raw.managerYears == null ? '' : r.raw.managerYears.toFixed(2),
       r.raw.totalFee == null ? '' : r.raw.totalFee.toFixed(2),
       r.raw.establishDate || '',
+      (r.raw.peers || []).map((p) => p.name).join('、'),
     ];
   });
   const esc = (v) => {
@@ -191,4 +229,49 @@ export function toCSV(results) {
 
 function fmt(x) {
   return x == null ? '' : x.toFixed(1);
+}
+
+// 排序取值：与前端列一致
+function sortValue(r, key) {
+  switch (key) {
+    case 'name':
+      return r.name;
+    case 'category':
+      return r.category;
+    case 'composite':
+      return r.composite ?? -Infinity;
+    case 'rank':
+      return r.rank;
+    case 'establishDate':
+      return (r.raw && r.raw.establishDate) || '';
+    case 'size':
+      return (r.raw && r.raw.size) ?? -Infinity;
+    case 'managerYears':
+      return (r.raw && r.raw.managerYears) ?? -Infinity;
+    case 'fee':
+      return (r.raw && r.raw.totalFee) ?? Infinity;
+    default:
+      return (r.scores && r.scores[key]) ?? -Infinity;
+  }
+}
+
+// 在结果上做筛选 + 排序 + 分页，返回单页数据（避免整包返回）
+export function queryResults(results, { sort = 'composite', dir = -1, filter = 'all', company = [], page = 1, pageSize = 50 } = {}) {
+  let rows = results;
+  if (filter && filter !== 'all') rows = rows.filter((r) => r.categoryKey === filter);
+  if (company && company.length) {
+    rows = rows.filter((r) => company.some((c) => (r.name || '').startsWith(c)));
+  }
+  const sorted = [...rows].sort((a, b) => {
+    const av = sortValue(a, sort);
+    const bv = sortValue(b, sort);
+    if (av === bv) return 0;
+    return av > bv ? dir : -dir;
+  });
+  const total = results.length;
+  const filtered = sorted.length;
+  const pages = Math.max(1, Math.ceil(filtered / pageSize));
+  const cur = Math.min(Math.max(1, page), pages);
+  const items = sorted.slice((cur - 1) * pageSize, cur * pageSize);
+  return { total, filtered, items, page: cur, pageSize, pages };
 }
