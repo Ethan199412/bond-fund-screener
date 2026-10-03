@@ -24,6 +24,7 @@ export function scoreFund(metrics) {
     maxDrawdown: metrics.mdd != null ? piecewiseLinear(SCORE.maxDrawdown, metrics.mdd) : null,
     recoveryDays: metrics.recoveryDays != null ? piecewiseLinear(SCORE.recoveryDays, metrics.recoveryDays) : null,
     annualized: metrics.annualized != null ? piecewiseLinear(SCORE.annualized, metrics.annualized) : null,
+    sharpe: metrics.sharpe != null ? piecewiseLinear(SCORE.sharpe, metrics.sharpe) : null,
     type: TYPE_PREFERENCE[metrics.categoryKey] ?? TYPE_PREFERENCE.other,
     leverage: metrics.leverage != null ? piecewiseLinear(SCORE.leverage, metrics.leverage) : null,
     size: metrics.size != null ? piecewiseLinear(SCORE.size, metrics.size) : null,

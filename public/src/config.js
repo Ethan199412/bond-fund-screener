@@ -58,6 +58,13 @@ export const COLUMNS = [
     desc: '近 3 年年化复利收益（历史不足 3 年则退回 5 年）。理想 ≥3.5%，可接受 3.0%~3.5%，<3% 需谨慎。',
   },
   {
+    key: 'sharpe',
+    label: '夏普',
+    align: 'right',
+    width: 100,
+    desc: '3 年平均夏普比率 =（年化收益 − 2% 无风险利率）÷ 年化波动率。理想 ≥2，可接受 0.8~2，<0.8 需谨慎。',
+  },
+  {
     key: 'type',
     label: '类型',
     align: 'right',

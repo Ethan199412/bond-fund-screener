@@ -49,6 +49,13 @@ function Cell({ r, col }) {
           <div className="raw-sm">{pct(raw.annualized3)}</div>
         </>
       );
+    case 'sharpe':
+      return (
+        <>
+          <ScorePill score={r.scores.sharpe} />
+          <div className="raw-sm">{raw.sharpe == null ? '—' : raw.sharpe.toFixed(2)}</div>
+        </>
+      );
     case 'type':
       return <ScorePill score={r.scores.type} />;
     case 'leverage':

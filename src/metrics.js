@@ -93,6 +93,27 @@ export function computeRecoveryDays(navSeries, lookbackDays) {
   return best ? { days: best.days, troughDate: best.troughDate, recoverDate: best.recoverDate } : { days: 0 };
 }
 
+// 年化夏普比率：近 lookbackDays 的累计净值日收益率，(年化收益 − 无风险利率) ÷ 年化波动率
+// 年化用 252 个交易日；波动率接近 0 或样本不足时返回 null（不打分）
+export function computeSharpe(navSeries, lookbackDays, riskFreeRate = 0.02) {
+  const pts = sliceLookback(navSeries, lookbackDays);
+  if (pts.length < 30) return null;
+  const returns = [];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1][1];
+    const cur = pts[i][1];
+    if (prev > 0 && cur > 0) returns.push(cur / prev - 1);
+  }
+  if (returns.length < 20) return null;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, b) => a + (b - mean) * (b - mean), 0) / returns.length;
+  const sd = Math.sqrt(variance);
+  if (sd < 1e-6) return null;
+  const annReturn = mean * 252;
+  const annVol = sd * Math.sqrt(252);
+  return (annReturn - riskFreeRate) / annVol;
+}
+
 // 经理任职年限字符串 → 年（如 "13年又19天"）
 export function parseManagerYears(workTime) {
   if (!workTime) return null;

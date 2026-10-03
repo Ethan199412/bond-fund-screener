@@ -6,9 +6,9 @@ import {
   getFeeInfo,
   categorize,
 } from './eastmoney.js';
-import { computeAnnualized, computeMaxDrawdown, computeRecoveryDays, parseManagerYears } from './metrics.js';
+import { computeAnnualized, computeMaxDrawdown, computeRecoveryDays, computeSharpe, parseManagerYears } from './metrics.js';
 import { scoreFund } from './score.js';
-import { LOOKBACK, DEFAULT_MAX_FUNDS, INCLUDE_CATEGORIES } from './config.js';
+import { LOOKBACK, DEFAULT_MAX_FUNDS, INCLUDE_CATEGORIES, RISK_FREE_RATE } from './config.js';
 import { mapPool, sleep } from './http.js';
 
 const DAY = 86400000;
@@ -108,6 +108,8 @@ async function scoreOne(f) {
   const lookbackDays = LOOKBACK.mddYears * 365;
   const mdd = computeMaxDrawdown(accNav, lookbackDays);
   const rec = computeRecoveryDays(accNav, lookbackDays);
+  // 3 年平均夏普
+  const sharpe = computeSharpe(accNav, LOOKBACK.annualizedYears * 365, RISK_FREE_RATE);
 
   const managerYears = parseManagerYears(pz.manager && pz.manager.workTime);
   const size = fee && fee.size != null ? fee.size : pz.size && pz.size.value;
@@ -118,6 +120,7 @@ async function scoreOne(f) {
     mdd: mdd ? mdd.mdd : null,
     recoveryDays: rec ? rec.days : null,
     annualized,
+    sharpe,
     categoryKey: cat.key,
     leverage: pz.bondPctOfNav,
     size,
@@ -143,6 +146,7 @@ async function scoreOne(f) {
       recoveryTroughDate: rec ? rec.troughDate : null,
       annualized3,
       annualized5,
+      sharpe,
       leverage: pz.bondPctOfNav,
       leverageDate: pz.bondPctDate,
       size,
@@ -173,6 +177,7 @@ export function toCSV(results) {
     '最大回撤分',
     '回撤修复分',
     '年化收益分',
+    '夏普分',
     '类型分',
     '杠杆率分',
     '规模分',
@@ -182,6 +187,7 @@ export function toCSV(results) {
     '回撤修复天数',
     '3年年化%',
     '5年年化%',
+    '夏普比率',
     '杠杆率%(债券占净比)',
     '规模(亿)',
     '基金经理',
@@ -202,6 +208,7 @@ export function toCSV(results) {
       fmt(r.scores.maxDrawdown),
       fmt(r.scores.recoveryDays),
       fmt(r.scores.annualized),
+      fmt(r.scores.sharpe),
       fmt(r.scores.type),
       fmt(r.scores.leverage),
       fmt(r.scores.size),
@@ -211,6 +218,7 @@ export function toCSV(results) {
       r.raw.recoveryDays ?? '',
       pct(r.raw.annualized3),
       pct(r.raw.annualized5),
+      r.raw.sharpe == null ? '' : r.raw.sharpe.toFixed(2),
       r.raw.leverage == null ? '' : r.raw.leverage.toFixed(1),
       r.raw.size ?? '',
       r.raw.managerName || '',
